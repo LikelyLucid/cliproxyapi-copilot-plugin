@@ -19,7 +19,7 @@ func TestQuotaRejectsPlanWithoutUsableQuota(t *testing.T) {
 	}
 }
 
-func TestQuotaPreservesFractionalValuesWithoutInventingPeriod(t *testing.T) {
+func TestQuotaPreservesFractionalPremiumValuesAndMonthlyPeriod(t *testing.T) {
 	out, err := quotaFromBody(`{"copilot_plan":"individual","quota_snapshots":{"premium_interactions":{"remaining":12.75,"percent_remaining":29.5}}}`)
 	if err != nil {
 		t.Fatal(err)
@@ -34,8 +34,8 @@ func TestQuotaPreservesFractionalValuesWithoutInventingPeriod(t *testing.T) {
 	if bucket.RemainingFraction == nil || *bucket.RemainingFraction != 0.295 {
 		t.Fatalf("percentage not preserved: %+v", bucket)
 	}
-	if bucket.Window != "" || bucket.ResetTime != "" {
-		t.Fatalf("invented period: %+v", bucket)
+	if bucket.Window != "monthly" || bucket.ResetTime != "" {
+		t.Fatalf("incorrect period or invented reset: %+v", bucket)
 	}
 }
 

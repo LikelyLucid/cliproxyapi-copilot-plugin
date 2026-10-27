@@ -171,7 +171,12 @@ func fetchQuota(ctx context.Context, req quotaFetchRequest, client quotaHTTPDoer
 				return quotaFetchResponse{}, errors.New("copilot quota: invalid upstream percentage")
 			}
 			fraction := *snapshot.PercentRemaining / 100
-			out.Groups = append(out.Groups, quotaGroup{DisplayName: label, Buckets: []quotaBucket{{RemainingFraction: &fraction, ResetTime: resetDate}}})
+			window := ""
+			if key == "premium_interactions" {
+				// GitHub documents premium-request allowances as monthly.
+				window = "monthly"
+			}
+			out.Groups = append(out.Groups, quotaGroup{DisplayName: label, Buckets: []quotaBucket{{Window: window, RemainingFraction: &fraction, ResetTime: resetDate}}})
 		}
 	}
 	// A plan is metadata, not evidence of a supported quota response.

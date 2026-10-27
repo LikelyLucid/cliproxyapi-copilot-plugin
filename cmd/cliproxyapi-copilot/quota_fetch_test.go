@@ -44,6 +44,9 @@ func TestFetchQuotaSelectedCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(got.Groups) != 1 || len(got.Groups[0].Buckets) != 1 || got.Groups[0].Buckets[0].Window != "monthly" {
+		t.Fatalf("premium quota must have a monthly window: %+v", got.Groups)
+	}
 	raw, err := json.Marshal(got)
 	if err != nil {
 		t.Fatal(err)
