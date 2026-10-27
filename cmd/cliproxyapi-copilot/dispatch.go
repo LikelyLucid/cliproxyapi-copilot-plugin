@@ -27,6 +27,7 @@ type registration struct {
 type registrationCapability struct {
 	ModelProvider         bool                         `json:"model_provider"`
 	AuthProvider          bool                         `json:"auth_provider"`
+	QuotaProvider         bool                         `json:"quota_provider"`
 	Executor              bool                         `json:"executor"`
 	ExecutorModelScope    pluginapi.ExecutorModelScope `json:"executor_model_scope"`
 	ExecutorInputFormats  []string                     `json:"executor_input_formats"`
@@ -95,8 +96,23 @@ func dispatch(method string, request []byte) (any, error) {
 			return nil, errUnmarshal
 		}
 		return pluginService.ModelsForAuth(ctx, req.HostCallbackID, req.AuthModelRequest)
-	case pluginabi.MethodAuthIdentifier, pluginabi.MethodExecutorIdentifier:
+	case pluginabi.MethodAuthIdentifier, pluginabi.MethodExecutorIdentifier, "quota.identifier":
 		return identifierResponse{Identifier: "copilot"}, nil
+	case "quota.describe":
+		return map[string]any{"display_name": "GitHub Copilot", "supported_providers": []string{"copilot"}, "supports_reset": false}, nil
+	case "quota.fetch":
+		var req quotaFetchRequest
+		if err := json.Unmarshal(request, &req); err != nil {
+			return nil, err
+		}
+		// The quota ABI omits both host and credential proxy settings, while the
+		// host HTTP callback cannot disable redirects or bind the credential's
+		// proxy. We cannot safely establish the routing policy, even when the
+		// request itself contains no proxy field. Fail closed before any I/O.
+		if !pluginService.Config().QuotaDirectGitHub {
+			return nil, errors.New("copilot quota: unavailable because host and credential proxy policy cannot be verified")
+		}
+		return fetchQuotaWithHostState(ctx, req, newDirectQuotaTransport(), hostQuotaAuthList)
 	case pluginabi.MethodAuthParse:
 		var req pluginapi.AuthParseRequest
 		if errUnmarshal := json.Unmarshal(request, &req); errUnmarshal != nil {
@@ -167,6 +183,7 @@ func pluginRegistration() registration {
 			Author:           "self-owned",
 			GitHubRepository: "https://github.com/arthur-sommer-etc/cliproxyapi-copilot-plugin",
 			ConfigFields: []pluginapi.ConfigField{
+				{Name: "quota.direct-github", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Opt in to direct GitHub quota requests bypassing all configured proxies."},
 				{Name: "github_client_id", Type: pluginapi.ConfigFieldTypeString, Description: "Public GitHub OAuth application client identifier used for device flow."},
 				{Name: "github_scope", Type: pluginapi.ConfigFieldTypeString, Description: "Space-delimited GitHub OAuth scopes; defaults to the least-privilege read:user scope."},
 				{Name: "github_base_url", Type: pluginapi.ConfigFieldTypeString, Description: "GitHub web OAuth base URL."},
@@ -181,10 +198,11 @@ func pluginRegistration() registration {
 		Capabilities: registrationCapability{
 			ModelProvider:         true,
 			AuthProvider:          true,
+			QuotaProvider:         bool(pluginService.Config().QuotaDirectGitHub),
 			Executor:              true,
 			ExecutorModelScope:    pluginapi.ExecutorModelScopeOAuth,
-			ExecutorInputFormats:  []string{"openai-response", "claude"},
-			ExecutorOutputFormats: []string{"openai-response", "claude"},
+			ExecutorInputFormats:  []string{"openai", "openai-response", "claude"},
+			ExecutorOutputFormats: []string{"openai", "openai-response", "claude"},
 		},
 	}
 }

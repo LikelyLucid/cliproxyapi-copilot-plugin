@@ -224,7 +224,13 @@ func normalizeModels(models []upstreamModel) []upstreamModel {
 		model.Vendor = strings.TrimSpace(model.Vendor)
 		model.Version = strings.TrimSpace(model.Version)
 		model.Object = strings.TrimSpace(model.Object)
+		// Only infer chat completions when the catalog omitted endpoint metadata;
+		// an explicit but unsupported endpoint must not be treated as missing.
+		missingEndpoints := model.SupportedEndpoints == nil
 		model.SupportedEndpoints = normalizeEndpoints(model.SupportedEndpoints)
+		if missingEndpoints && strings.EqualFold(strings.TrimSpace(model.Capabilities.Type), "chat") {
+			model.SupportedEndpoints = append(model.SupportedEndpoints, translate.EndpointChatCompletions)
+		}
 		if endpoint, ok := specialResponsesModel(model.ID); ok && !contains(model.SupportedEndpoints, endpoint) {
 			model.SupportedEndpoints = append(model.SupportedEndpoints, endpoint)
 		}

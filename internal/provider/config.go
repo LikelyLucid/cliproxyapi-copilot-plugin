@@ -16,18 +16,29 @@ const (
 	defaultCopilotAPIURL  = "https://api.githubcopilot.com"
 )
 
+type strictQuotaOptIn bool
+
+func (v *strictQuotaOptIn) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.ScalarNode || node.Tag != "!!bool" || (node.Value != "true" && node.Value != "false") {
+		return fmt.Errorf("quota.direct-github must be true or false")
+	}
+	*v = strictQuotaOptIn(node.Value == "true")
+	return nil
+}
+
 type Config struct {
-	Enabled                  bool     `yaml:"enabled"`
-	GitHubClientID           string   `yaml:"github_client_id"`
-	GitHubScope              string   `yaml:"github_scope"`
-	GitHubBaseURL            string   `yaml:"github_base_url"`
-	GitHubAPIURL             string   `yaml:"github_api_url"`
-	CopilotAPIURL            string   `yaml:"copilot_api_url"`
-	AllowInsecureBaseURLs    bool     `yaml:"allow_insecure_base_urls"`
-	OAuthTimeoutSeconds      int      `yaml:"oauth_timeout_seconds"`
-	ModelCacheTTLSeconds     int      `yaml:"model_cache_ttl_seconds"`
-	TokenExpiryBufferSeconds int      `yaml:"token_expiry_buffer_seconds"`
-	ExcludedModelPrefixes    []string `yaml:"excluded_model_prefixes"`
+	QuotaDirectGitHub        strictQuotaOptIn `yaml:"quota.direct-github"`
+	Enabled                  bool             `yaml:"enabled"`
+	GitHubClientID           string           `yaml:"github_client_id"`
+	GitHubScope              string           `yaml:"github_scope"`
+	GitHubBaseURL            string           `yaml:"github_base_url"`
+	GitHubAPIURL             string           `yaml:"github_api_url"`
+	CopilotAPIURL            string           `yaml:"copilot_api_url"`
+	AllowInsecureBaseURLs    bool             `yaml:"allow_insecure_base_urls"`
+	OAuthTimeoutSeconds      int              `yaml:"oauth_timeout_seconds"`
+	ModelCacheTTLSeconds     int              `yaml:"model_cache_ttl_seconds"`
+	TokenExpiryBufferSeconds int              `yaml:"token_expiry_buffer_seconds"`
+	ExcludedModelPrefixes    []string         `yaml:"excluded_model_prefixes"`
 }
 
 func DefaultConfig() Config {

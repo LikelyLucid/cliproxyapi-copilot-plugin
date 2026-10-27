@@ -37,6 +37,12 @@ the official `sdk/pluginabi` and `sdk/pluginapi` contracts. It registers:
 - `AuthProvider`: GitHub device-code OAuth and host-owned credential storage
 - `ModelProvider`: authenticated discovery from the Copilot `/models` endpoint
 - `ProviderExecutor`: non-streaming, SSE streaming, and restricted provider HTTP
+- `QuotaProvider`: optional GitHub premium quota on CLIProxyAPI v8
+
+For a catalog entry explicitly classified as chat, missing endpoint metadata
+falls back to Chat Completions; an explicitly empty endpoint list does not.
+OpenAI Chat Completions and Responses formats are handled separately, including
+stream framing for the v8 host.
 
 The provider packages are intentionally separated:
 
@@ -269,9 +275,29 @@ scripts/claude.sh --model claude-sonnet-5
 
 - A Go shared-library plugin is trusted, in-process code. Review and build this
   repository before mounting its artifact.
-- The plugin can make network requests only through CLIProxyAPI host callbacks;
-  its generic executor HTTP method rejects destinations outside the authenticated
-  Copilot API origin.
+- Provider traffic uses CLIProxyAPI host callbacks; its generic executor HTTP
+  method rejects destinations outside the authenticated Copilot API origin.
+- Quota fetching is disabled by default and fails closed because the quota ABI
+  does not supply host-wide or credential-specific proxy policy. To explicitly
+  opt into direct GitHub access, add the **literal dotted key**:
+
+  ```yaml
+  plugins:
+    configs:
+      cliproxyapi-copilot:
+        quota.direct-github: true
+  ```
+
+  This bypasses the host HTTP callback, host/credential proxy settings and
+  environment proxies for quota only. It sends the selected credential to the
+  fixed HTTPS GitHub quota endpoint, refuses redirects, and bounds response size
+  and duration. Other provider operations continue to use the host transport.
+  Before each quota fetch, including forced refreshes, the plugin checks the
+  host credential list and fails closed if the credential is disabled or its
+  state cannot be verified. This snapshot check cannot cancel a request already
+  in flight when the credential is disabled. Unlimited quota may not display
+  in UIs that discard empty groups. A cancelled management request can continue
+  until the quota timeout.
 - Persistent OAuth material is confined to the new named volume. Generated API
   and management secrets remain under ignored `.runtime/`.
 - Copilot tokens are memory-only. Error bodies are length-bounded and redact

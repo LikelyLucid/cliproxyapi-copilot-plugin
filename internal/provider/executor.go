@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -204,6 +206,13 @@ func (s *Service) pumpStream(outputID, endpoint, destination, model string, orig
 			return errTranslate
 		}
 		for _, output := range frames {
+			if destination == "openai" {
+				var err error
+				output, err = chatStreamPayload(output)
+				if err != nil {
+					return err
+				}
+			}
 			if len(output) == 0 {
 				continue
 			}
@@ -241,10 +250,34 @@ func (s *Service) pumpStream(outputID, endpoint, destination, model string, orig
 	}
 }
 
+// Chat Completions handlers frame each plugin payload as an SSE data event.
+// Pass the JSON data itself, not an already framed SSE event.
+func chatStreamPayload(frame []byte) ([]byte, error) {
+	var lines [][]byte
+	for _, line := range bytes.Split(frame, []byte("\n")) {
+		line = bytes.TrimSuffix(line, []byte("\r"))
+		if bytes.HasPrefix(line, []byte("data:")) {
+			value := bytes.TrimPrefix(line, []byte("data:"))
+			value = bytes.TrimPrefix(value, []byte(" "))
+			lines = append(lines, value)
+		}
+	}
+	payload := bytes.Join(lines, []byte("\n"))
+	if len(payload) == 0 || bytes.Equal(bytes.TrimSpace(payload), []byte("[DONE]")) {
+		return nil, nil
+	}
+	if !json.Valid(payload) {
+		return nil, fmt.Errorf("invalid Copilot chat stream frame")
+	}
+	return payload, nil
+}
+
 func normalizeRequestFormat(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "", "responses", "openai-response", "openai-responses":
 		return "openai-response"
+	case "openai":
+		return "openai"
 	case "claude", "anthropic":
 		return "claude"
 	default:
